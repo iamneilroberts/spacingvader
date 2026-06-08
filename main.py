@@ -12,6 +12,9 @@ Build the web version with:
 
 then open the printed http://localhost:8000 URL (works on a phone browser too
 once the build/ folder is hosted somewhere reachable).
+
+The CI workflow publishes this build to GitHub Pages on push; once live it's at:
+    https://iamneilroberts.github.io/spacingvader/
 """
 
 import asyncio
