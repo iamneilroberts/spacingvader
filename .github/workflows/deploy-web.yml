@@ -1,0 +1,66 @@
+name: Deploy web build to GitHub Pages
+
+# Builds the pygbag (WebAssembly) version of the game and publishes it to
+# GitHub Pages, so there's a stable URL you can bookmark on your phone.
+#
+# One-time repo setup: Settings -> Pages -> "Build and deployment" -> Source:
+# "GitHub Actions". After the first successful run the site is at
+#   https://<owner>.github.io/spacingvader/
+
+on:
+  push:
+    branches:
+      - main
+      - claude/space-invaders-game-6047o1
+    paths:
+      - "space_invaders.py"
+      - "main.py"
+      - "web/**"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch:
+
+# Allow the workflow to publish to Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deploy at a time; don't cancel an in-flight one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pygbag
+        run: pip install pygbag
+
+      - name: Build web bundle
+        run: pygbag --build main.py
+
+      - name: Add Cloudflare-style headers (harmless on Pages, useful if reused)
+        run: cp web/_headers build/web/_headers || true
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

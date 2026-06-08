@@ -1,0 +1,5 @@
+# Cloudflare Pages headers. Cross-origin isolation lets the pygbag/WASM runtime
+# use threads + SharedArrayBuffer; without these it falls back to single-thread.
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp

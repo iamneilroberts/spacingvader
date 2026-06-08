@@ -70,6 +70,37 @@ that's also when the first beep fires, so it lines up naturally.
 pip + pygame and a real display), copy `space_invaders.py` over, and run it
 directly.
 
+### Auto-deploy to a bookmarkable URL (GitHub Pages)
+
+A workflow at `.github/workflows/deploy-web.yml` builds the pygbag bundle and
+publishes it to GitHub Pages on every push. **One-time setup:** in the repo,
+go to **Settings → Pages → Build and deployment → Source** and pick
+**"GitHub Actions"**. After the first run the game is live at:
+
+```
+https://<owner>.github.io/spacingvader/
+```
+
+(for this repo, `https://iamneilroberts.github.io/spacingvader/`). Bookmark that
+on your phone. GitHub Pages can't set cross-origin isolation headers, so the
+WASM runtime runs single-threaded — which is plenty for this game.
+
+### Optional: host on a custom domain (Cloudflare Pages)
+
+If you'd rather have a branded URL like `invaders.voygent.ai`, deploy the same
+`build/web/` folder to **Cloudflare Pages** instead. The included `web/_headers`
+sets `Cross-Origin-Opener-Policy` / `Cross-Origin-Embedder-Policy` so the WASM
+runtime can use threads:
+
+```bash
+pip install pygbag
+pygbag --build main.py
+cp web/_headers build/web/_headers
+npx wrangler pages deploy build/web --project-name=spacingvader
+```
+
+Then attach the subdomain to the Pages project in the Cloudflare dashboard.
+
 ## Scoring
 
 - Aliens: 40 / 30 / 20 / 10 / 10 points by row (top rows worth more).
