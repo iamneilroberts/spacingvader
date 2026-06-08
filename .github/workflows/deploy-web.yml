@@ -15,7 +15,6 @@ on:
     paths:
       - "space_invaders.py"
       - "main.py"
-      - "web/**"
       - ".github/workflows/deploy-web.yml"
   workflow_dispatch:
 
@@ -45,9 +44,6 @@ jobs:
 
       - name: Build web bundle
         run: pygbag --build main.py
-
-      - name: Add Cloudflare-style headers (harmless on Pages, useful if reused)
-        run: cp web/_headers build/web/_headers || true
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
