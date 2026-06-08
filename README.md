@@ -1,8 +1,10 @@
 # Space Invaders
 
 A Space Invaders clone written in Python with [pygame](https://www.pygame.org/).
-Built and tested on Linux. Sound is produced with short generated "beep" tones,
-so there are no audio asset files to download.
+Built and tested on Linux. Runs on the desktop, or in a phone/desktop browser
+when packaged with pygbag (with on-screen touch controls). Sound is produced
+with short generated "beep" tones, so there are no audio asset files to
+download.
 
 ## Features
 
@@ -31,6 +33,8 @@ and runs silently rather than crashing.
 
 ## Controls
 
+**Keyboard (desktop):**
+
 | Key | Action |
 | --- | --- |
 | Left / Right arrows, or A / D | Move |
@@ -38,6 +42,33 @@ and runs silently rather than crashing.
 | P | Pause / resume |
 | Enter | Start / restart |
 | Esc | Quit |
+
+**Touch / mouse (phone or desktop):** translucent on-screen pads sit in the
+bottom corners — hold **◄ / ►** to move and tap **FIRE** to shoot. Tap anywhere
+to start or restart from the menu and game-over screens.
+
+## Play on a phone or in a browser
+
+The desktop pygame window can't run inside a phone browser, so for mobile play
+the game is packaged to WebAssembly with [pygbag](https://pypi.org/project/pygbag/)
+(pygame-ce → WASM). The game loop is already async (see `main.py`), so no code
+changes are needed — just build it:
+
+```bash
+pip install pygbag
+pygbag main.py          # builds and serves at http://localhost:8000
+```
+
+- Open `http://localhost:8000` on the same machine to test, or
+- host the generated `build/web/` folder anywhere static (GitHub Pages, Netlify,
+  etc.) and open that URL on your phone — the touch controls take over.
+
+Audio in the browser only starts after your first tap (browser autoplay policy);
+that's also when the first beep fires, so it lines up naturally.
+
+**Android, no build step:** install **Pydroid 3** from the Play Store (it ships
+pip + pygame and a real display), copy `space_invaders.py` over, and run it
+directly.
 
 ## Scoring
 
@@ -54,8 +85,9 @@ This game was built in a single Claude Code session.
 - **Date:** 2026-06-08
 - **Model:** `claude-opus-4-8` (1M context)
 - **Language / engine:** Python 3.11, pygame 2.6.1
-- **Result:** one self-contained file (`space_invaders.py`, ~560 lines) plus
-  `README.md`, `requirements.txt`, and `.gitignore`.
+- **Result:** the game in `space_invaders.py` plus a pygbag entry point
+  (`main.py`) for the browser/mobile build, with `README.md`,
+  `requirements.txt`, and `.gitignore`.
 - **Wall-clock time:** _<fill in from session>_
 - **Token usage:** _<fill in from session — input / output / total>_
 
@@ -107,3 +139,11 @@ The implementation came together in a single straight-through pass:
 No render-on-a-real-display check was possible from the headless build
 environment; correctness was established through the logic-level smoke test
 above. All tunable gameplay constants live at the top of `space_invaders.py`.
+
+**Follow-up (same session): mobile / browser support.** To make the game
+playable from a phone, the loop was converted to `async` (with a per-frame
+`await asyncio.sleep(0)`) and a `main.py` pygbag entry point added, so it can be
+compiled to WebAssembly. On-screen touch pads (hold ◄/► to move, tap FIRE) were
+added alongside the keyboard, wired to both finger and mouse events. A second
+headless smoke test verified the pads (hold-to-move, sliding between pads, and
+fire-replaces-bullet) and that the async loop runs and exits cleanly.

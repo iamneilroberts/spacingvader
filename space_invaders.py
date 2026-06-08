@@ -14,18 +14,25 @@ Features:
   * Sound via short generated "beep" tones (no audio files needed), which works
     well on Linux through pygame's mixer.
 
-Controls:
+Controls (keyboard):
   Left / Right arrows (or A / D) : move
   Space                          : fire
   P                              : pause
   Enter                          : start / restart
   Esc                            : quit
+
+Controls (touch / mouse):
+  On-screen buttons at the bottom: hold left/right to move, tap FIRE to shoot.
+  Tap anywhere to start or restart from the menu / game-over screens.
+
+Runs on the desktop directly (`python3 space_invaders.py`) and in a web/mobile
+browser when packaged with pygbag (the loop is async; see main.py and README).
 """
 
+import asyncio
 import math
 import random
 import struct
-import sys
 
 import pygame
 
@@ -314,6 +321,17 @@ class Game:
         self.big_font = pygame.font.SysFont("monospace", 52, bold=True)
         self.state = "menu"   # menu | playing | paused | gameover | win
         self.high_score = 0
+
+        # On-screen touch controls (also usable with the mouse). Placed in the
+        # bottom corners so they don't sit on top of the cannon at center.
+        self.left_btn = pygame.Rect(20, SCREEN_H - 72, 72, 58)
+        self.right_btn = pygame.Rect(104, SCREEN_H - 72, 72, 58)
+        self.fire_btn = pygame.Rect(SCREEN_W - 116, SCREEN_H - 72, 96, 58)
+        # finger_id / "mouse" -> "left" | "right" for currently-held moves.
+        self.active_touches = {}
+        self.touch_left = False
+        self.touch_right = False
+
         self.reset()
 
     # -- setup -------------------------------------------------------------
@@ -506,9 +524,9 @@ class Game:
 
         keys = pygame.key.get_pressed()
         dx = 0
-        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+        if keys[pygame.K_LEFT] or keys[pygame.K_a] or self.touch_left:
             dx -= PLAYER_SPEED
-        if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+        if keys[pygame.K_RIGHT] or keys[pygame.K_d] or self.touch_right:
             dx += PLAYER_SPEED
         self.player.move(dx)
 
@@ -554,12 +572,37 @@ class Game:
         self.screen.blit(hi, (SCREEN_W // 2 - hi.get_width() // 2, 12))
         lvl = self.font.render(f"LVL {self.level}", True, YELLOW)
         self.screen.blit(lvl, (SCREEN_W - lvl.get_width() - 16, 12))
-        # Lives as little ships.
+        # Lives as little ships, just under the score (bottom corners are
+        # reserved for the touch controls).
         for i in range(self.player.lives):
             x = 16 + i * (PLAYER_W // 2 + 8)
             pygame.draw.rect(self.screen, GREEN,
-                             (x, SCREEN_H - 28, PLAYER_W // 2, PLAYER_H // 2),
+                             (x, 44, PLAYER_W // 2, PLAYER_H // 2),
                              border_radius=3)
+
+    def draw_touch_controls(self):
+        """Translucent on-screen pads for touch / mouse play."""
+        overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+
+        def pad(rect, active):
+            fill = (255, 255, 255, 90 if active else 40)
+            pygame.draw.rect(overlay, fill, rect, border_radius=12)
+            pygame.draw.rect(overlay, (255, 255, 255, 120), rect, width=2,
+                             border_radius=12)
+
+        pad(self.left_btn, self.touch_left)
+        pad(self.right_btn, self.touch_right)
+        pad(self.fire_btn, False)
+        self.screen.blit(overlay, (0, 0))
+
+        def label(text, rect):
+            surf = self.font.render(text, True, WHITE)
+            self.screen.blit(surf, (rect.centerx - surf.get_width() // 2,
+                                    rect.centery - surf.get_height() // 2))
+
+        label("<", self.left_btn)
+        label(">", self.right_btn)
+        label("FIRE", self.fire_btn)
 
     def draw_playing(self):
         for shield in self.shields:
@@ -574,6 +617,7 @@ class Game:
         for b in self.alien_bullets:
             b.draw(self.screen)
         self.draw_hud()
+        self.draw_touch_controls()
 
     def draw_center_text(self, lines):
         total_h = sum(f.get_height() for f, _ in lines) + 10 * (len(lines) - 1)
@@ -603,6 +647,52 @@ class Game:
             (self.font.render("Press P to resume", True, WHITE), None),
         ])
 
+    # -- touch / mouse input ----------------------------------------------
+    def _point_region(self, x, y):
+        if self.left_btn.collidepoint(x, y):
+            return "left"
+        if self.right_btn.collidepoint(x, y):
+            return "right"
+        if self.fire_btn.collidepoint(x, y):
+            return "fire"
+        return None
+
+    def _recompute_touch_move(self):
+        regions = set(self.active_touches.values())
+        self.touch_left = "left" in regions
+        self.touch_right = "right" in regions
+
+    def _touch_down(self, fid, x, y):
+        # Outside of play, any tap advances the screen.
+        if self.state in ("menu", "gameover"):
+            self.reset()
+            self.state = "playing"
+            return
+        if self.state == "paused":
+            self.state = "playing"
+            return
+        region = self._point_region(x, y)
+        if region == "fire":
+            self._fire_player_bullet()
+        elif region in ("left", "right"):
+            self.active_touches[fid] = region
+        self._recompute_touch_move()
+
+    def _touch_move(self, fid, x, y):
+        # Let a held finger slide between the left and right pads.
+        if fid not in self.active_touches:
+            return
+        region = self._point_region(x, y)
+        if region in ("left", "right"):
+            self.active_touches[fid] = region
+        else:
+            self.active_touches.pop(fid, None)
+        self._recompute_touch_move()
+
+    def _touch_up(self, fid):
+        self.active_touches.pop(fid, None)
+        self._recompute_touch_move()
+
     # -- event / loop ------------------------------------------------------
     def handle_events(self):
         for event in pygame.event.get():
@@ -622,9 +712,24 @@ class Game:
                         self.state = "paused"
                 elif self.state == "paused" and event.key == pygame.K_p:
                     self.state = "playing"
+            elif event.type == pygame.FINGERDOWN:
+                self._touch_down(event.finger_id,
+                                 event.x * SCREEN_W, event.y * SCREEN_H)
+            elif event.type == pygame.FINGERMOTION:
+                self._touch_move(event.finger_id,
+                                 event.x * SCREEN_W, event.y * SCREEN_H)
+            elif event.type == pygame.FINGERUP:
+                self._touch_up(event.finger_id)
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                self._touch_down("mouse", event.pos[0], event.pos[1])
+            elif event.type == pygame.MOUSEMOTION:
+                if event.buttons[0]:
+                    self._touch_move("mouse", event.pos[0], event.pos[1])
+            elif event.type == pygame.MOUSEBUTTONUP:
+                self._touch_up("mouse")
         return True
 
-    def run(self):
+    async def run(self):
         running = True
         while running:
             running = self.handle_events()
@@ -646,10 +751,16 @@ class Game:
 
             pygame.display.flip()
             self.clock.tick(FPS)
+            # Yield to the event loop every frame. Required for the browser
+            # (pygbag) build; a harmless no-op cost on the desktop.
+            await asyncio.sleep(0)
 
         pygame.quit()
-        sys.exit(0)
+
+
+async def main():
+    await Game().run()
 
 
 if __name__ == "__main__":
-    Game().run()
+    asyncio.run(main())
